@@ -1,10 +1,13 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net"
 	"time"
+
+	"golang.org/x/net/dns/dnsmessage"
 )
 
 func main() {
@@ -23,7 +26,13 @@ func main() {
 			log.Println("read error:", err)
 			continue
 		}
-		fmt.Printf("%d bytes from %s\n", n, from)
+
+		q, err := parseQuestion(buf[:n])
+		if err != nil {
+			log.Println("parse error:", err)
+		} else {
+			log.Printf("%s → %s (%s)", from.IP, q.Name, q.Type)
+		}
 
 		resp, err := exchange("1.1.1.1:53", buf[:n])
 		if err != nil {
@@ -58,4 +67,17 @@ func exchange(addr string, msg []byte) ([]byte, error) {
 		return nil, fmt.Errorf("error reading from server: %w", err)
 	}
 	return resp[:n], nil
+}
+
+func parseQuestion(b []byte) (dnsmessage.Question, error) {
+	var msg dnsmessage.Message
+	err := msg.Unpack(b)
+	if err != nil {
+		return dnsmessage.Question{}, fmt.Errorf("error unpacking query: %w", err)
+	}
+
+	if len(msg.Questions) == 0 {
+		return dnsmessage.Question{}, errors.New("no questions in packet")
+	}
+	return msg.Questions[0], nil
 }
