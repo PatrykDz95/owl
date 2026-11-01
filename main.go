@@ -26,25 +26,29 @@ func main() {
 			log.Println("read error:", err)
 			continue
 		}
+		query := make([]byte, n)
+		copy(query, buf[:n])
+		go handle(conn, from, query)
+	}
+}
 
-		q, err := parseQuestion(buf[:n])
-		if err != nil {
-			log.Println("parse error:", err)
-		} else {
-			log.Printf("%s → %s (%s)", from.IP, q.Name, q.Type)
-		}
+func handle(conn *net.UDPConn, from *net.UDPAddr, msg []byte) {
+	q, err := parseQuestion(msg)
+	if err != nil {
+		log.Println("parse error:", err)
+	} else {
+		log.Printf("%s → %s (%s)", from.IP, q.Name, q.Type)
+	}
 
-		resp, err := exchange("1.1.1.1:53", buf[:n])
-		if err != nil {
-			log.Println("exchange error:", err)
-			continue
-		}
+	resp, err := exchange("1.1.1.1:53", msg)
+	if err != nil {
+		log.Println("exchange error:", err)
+		return
+	}
 
-		_, err = conn.WriteToUDP(resp, from)
-		if err != nil {
-			log.Println("write error:", err)
-			continue
-		}
+	_, err = conn.WriteToUDP(resp, from)
+	if err != nil {
+		log.Println("write error:", err)
 	}
 }
 
