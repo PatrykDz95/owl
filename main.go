@@ -1,17 +1,30 @@
 package main
 
 import (
+	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"log"
 	"net"
+	"os"
+	"os/signal"
+	"sync"
 	"time"
 
 	"golang.org/x/net/dns/dnsmessage"
 )
 
 func main() {
-	addr := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 5300}
+	listen := flag.String("listen", "127.0.0.1:5300", "address to listen on")
+	upstream := flag.String("upstream", "1.1.1.1:53", "upstream DNS server")
+	flag.Parse()
+
+	addr, err := net.ResolveUDPAddr("udp", *listen)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	conn, err := net.ListenUDP("udp", addr)
 	if err != nil {
 		log.Fatal(err)
@@ -19,20 +32,41 @@ func main() {
 	defer conn.Close()
 	fmt.Println("listening on", conn.LocalAddr())
 
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	go func() {
+		<-ctx.Done()
+		conn.SetReadDeadline(time.Now())
+	}()
+
+	var wg sync.WaitGroup
 	buf := make([]byte, 4096)
 	for {
 		n, from, err := conn.ReadFromUDP(buf)
 		if err != nil {
+			if ctx.Err() != nil {
+				break
+			}
 			log.Println("read error:", err)
 			continue
 		}
 		query := make([]byte, n)
 		copy(query, buf[:n])
-		go handle(conn, from, query)
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			handle(conn, from, query, *upstream)
+		}()
 	}
+
+	log.Println("shutting down, waiting for queries...")
+	wg.Wait()
+	log.Println("bye")
 }
 
-func handle(conn *net.UDPConn, from *net.UDPAddr, msg []byte) {
+func handle(conn *net.UDPConn, from *net.UDPAddr, msg []byte, upstream string) {
 	q, err := parseQuestion(msg)
 	if err != nil {
 		log.Println("parse error:", err)
@@ -40,7 +74,7 @@ func handle(conn *net.UDPConn, from *net.UDPAddr, msg []byte) {
 		log.Printf("%s → %s (%s)", from.IP, q.Name, q.Type)
 	}
 
-	resp, err := exchange("1.1.1.1:53", msg)
+	resp, err := exchange(upstream, msg)
 	if err != nil {
 		log.Println("exchange error:", err)
 		return
