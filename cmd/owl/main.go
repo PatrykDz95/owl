@@ -11,7 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/PatrykDz95/owl/cmd/owl/internal/dns"
+	"github.com/PatrykDz95/owl/internal/device"
+	"github.com/PatrykDz95/owl/internal/dns"
 )
 
 func main() {
@@ -83,4 +84,12 @@ func handle(conn *net.UDPConn, from *net.UDPAddr, msg []byte, upstream string) {
 	if err != nil {
 		log.Println("write error:", err)
 	}
+
+	macStr := "?"
+	mac, err := device.LookupMAC(from.IP)
+	if err == nil {
+		macStr = mac.String()
+	}
+
+	log.Printf("%s (%s) → %s (%s)", from.IP, macStr, q.Name, q.Type)
 }
