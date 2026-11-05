@@ -67,12 +67,7 @@ func main() {
 }
 
 func handle(conn *net.UDPConn, from *net.UDPAddr, msg []byte, upstream string) {
-	q, err := dns.ParseQuestion(msg)
-	if err != nil {
-		log.Println("parse error:", err)
-	} else {
-		log.Printf("%s → %s (%s)", from.IP, q.Name, q.Type)
-	}
+	q, qErr := dns.ParseQuestion(msg)
 
 	resp, err := dns.Exchange(upstream, msg)
 	if err != nil {
@@ -91,5 +86,9 @@ func handle(conn *net.UDPConn, from *net.UDPAddr, msg []byte, upstream string) {
 		macStr = mac.String()
 	}
 
+	if qErr != nil {
+		log.Println("parse error:", qErr)
+		return
+	}
 	log.Printf("%s (%s) → %s (%s)", from.IP, macStr, q.Name, q.Type)
 }
