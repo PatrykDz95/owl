@@ -83,7 +83,7 @@ func handle(conn *net.UDPConn, from *net.UDPAddr, msg []byte, upstream string) {
 	macStr := "?"
 	mac, err := device.LookupMAC(from.IP)
 	if err == nil {
-		macStr = mac.String()
+		macStr = fmt.Sprintf("%s, %s", mac, device.Vendor(mac))
 	}
 
 	if qErr != nil {
